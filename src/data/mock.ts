@@ -157,3 +157,24 @@ export const incidentResponses: Record<Incident["type"], string[]> = {
 };
 
 export const incidentStages = ["Detected", "Analyzed", "Contained", "Resolved"];
+
+export type Notification = {
+  id: string;
+  title: string;
+  detail: string;
+  time: string;
+  status: Status;
+};
+
+export const notifications: Notification[] = [
+  { id: "NTF-01", title: "Telemetry Verified", detail: "Smart Meter SM-04 is reporting normally", time: "Just now", status: "normal" },
+  { id: "NTF-02", title: "Security Scan Complete", detail: "No critical anomalies detected", time: "2 min ago", status: "normal" },
+  { id: "NTF-03", title: "Network Status", detail: "Main Substation connection stable", time: "5 min ago", status: "normal" },
+];
+
+export const systemStatus = [
+  { label: "System", value: "Online", status: "normal" as Status },
+  { label: "Simulation", value: "Active", status: "normal" as Status },
+  { label: "Connected Devices", value: "24", status: "normal" as Status },
+  { label: "Security Status", value: "Secure", status: "normal" as Status },
+];
