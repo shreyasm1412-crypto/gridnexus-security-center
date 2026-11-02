@@ -25,6 +25,7 @@ const pos: Record<string, [number, number]> = {
   "SM-01": [130, 470], "SM-02": [270, 470], "SM-03": [410, 470],
   "SM-04": [590, 470], "SM-05": [730, 470], "SM-06": [870, 470],
 };
+const at = (id: string): [number, number] => pos[id] ?? [0, 0];
 const edges: [string, string][] = [
   ["PS-01", "SUB-01"], ["SUB-01", "FDR-A"], ["SUB-01", "FDR-B"],
   ["FDR-A", "SM-01"], ["FDR-A", "SM-02"], ["FDR-A", "SM-03"],
