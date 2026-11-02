@@ -25,6 +25,7 @@ const pos: Record<string, [number, number]> = {
   "SM-01": [130, 470], "SM-02": [270, 470], "SM-03": [410, 470],
   "SM-04": [590, 470], "SM-05": [730, 470], "SM-06": [870, 470],
 };
+const at = (id: string): [number, number] => pos[id] ?? [0, 0];
 const edges: [string, string][] = [
   ["PS-01", "SUB-01"], ["SUB-01", "FDR-A"], ["SUB-01", "FDR-B"],
   ["FDR-A", "SM-01"], ["FDR-A", "SM-02"], ["FDR-A", "SM-03"],
@@ -58,8 +59,8 @@ function Topology() {
         <div className="relative mx-auto aspect-[1000/560] w-full max-w-5xl">
           <svg viewBox="0 0 1000 560" className="absolute inset-0 h-full w-full">
             {edges.map(([a, b]) => {
-              const [x1, y1] = pos[a];
-              const [x2, y2] = pos[b];
+              const [x1, y1] = at(a);
+              const [x2, y2] = at(b);
               const s = statusOf(b);
               return (
                 <g key={a + b}>
@@ -70,7 +71,7 @@ function Topology() {
             })}
           </svg>
           {topologyNodes.map((n) => {
-            const [x, y] = pos[n.id];
+            const [x, y] = at(n.id);
             const s = statusOf(n.id);
             const Icon = icons[n.type];
             return (
