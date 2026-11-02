@@ -8,3 +8,7 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+## Architecture
+- All mock data lives in src/data/mock.ts with API-shaped types so it can be swapped for FastAPI calls without touching UI.
+- Simulation state is shared via src/lib/simulation.tsx context so the topology reflects the active attack.
