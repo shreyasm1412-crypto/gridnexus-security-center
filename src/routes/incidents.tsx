@@ -1,9 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Metric, PageHeading, SeverityBadge, StatusPill, riskTone, toneText } from "@/components/soc";
-import { incidentResponses, incidentStages, incidents, type Incident } from "@/data/mock";
+import { incidentResponses, incidentStages, incidents as mockIncidents, type Incident } from "@/data/mock";
+import { fetchIncidents, updateIncidentStatus } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/incidents")({
@@ -21,8 +22,54 @@ export const Route = createFileRoute("/incidents")({
 const stageIndex: Record<Incident["status"], number> = { Open: 0, Investigating: 1, Contained: 2, Resolved: 3 };
 
 function Incidents() {
+  const [incidentsList, setIncidentsList] = useState<Incident[]>(mockIncidents);
   const [sel, setSel] = useState<Incident | null>(null);
-  const count = (s: Incident["status"]) => incidents.filter((i) => i.status === s).length;
+
+  useEffect(() => {
+    let mounted = true;
+    const poll = async () => {
+      try {
+        const data = await fetchIncidents();
+        if (mounted && data) {
+          setIncidentsList(data);
+          // Keep sel synced if selected
+          if (sel) {
+            const freshSel = data.find((x) => x.id === sel.id);
+            if (freshSel) setSel(freshSel);
+          }
+        }
+      } catch (err) {
+        console.warn("Polling /api/incidents failed:", err);
+      }
+    };
+    poll();
+    const interval = setInterval(poll, 2000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [sel?.id]);
+
+  const count = (s: Incident["status"]) => incidentsList.filter((i) => i.status === s).length;
+
+  const handleStatusChange = async (newStatus: Incident["status"]) => {
+    if (!sel) return;
+    try {
+      const updated = await updateIncidentStatus(sel.id, newStatus);
+      if (updated) {
+        setSel(updated);
+        setIncidentsList((prev) => prev.map((item) => (item.id === sel.id ? updated : item)));
+      } else {
+        // Optimistic update if backend offline
+        const updatedLocal = { ...sel, status: newStatus };
+        setSel(updatedLocal);
+        setIncidentsList((prev) => prev.map((item) => (item.id === sel.id ? updatedLocal : item)));
+      }
+    } catch (err) {
+      console.warn("Updating incident status failed:", err);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeading title="Incident Response Center" subtitle="Incident lifecycle and recommended response actions" />
@@ -34,7 +81,7 @@ function Incidents() {
       </div>
 
       <div className="space-y-3">
-        {incidents.map((i) => (
+        {incidentsList.map((i) => (
           <button
             key={i.id}
             onClick={() => setSel(i)}
@@ -78,10 +125,30 @@ function Incidents() {
                 <div>
                   <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Recommended Response</h3>
                   <ul className="space-y-2">
-                    {incidentResponses[sel.type].map((r) => (
+                    {(incidentResponses[sel.type] || []).map((r) => (
                       <li key={r} className="flex items-center gap-2 rounded-md border bg-background/40 px-3 py-2 text-sm"><CheckCircle2 className="h-4 w-4 text-primary" />{r}</li>
                     ))}
                   </ul>
+                </div>
+                <div>
+                  <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Update Incident Status</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {(["Open", "Investigating", "Contained", "Resolved"] as Incident["status"][]).map((st) => (
+                      <button
+                        key={st}
+                        disabled={sel.status === st}
+                        onClick={() => handleStatusChange(st)}
+                        className={cn(
+                          "rounded border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
+                          sel.status === st
+                            ? "border-primary bg-primary/20 text-primary cursor-default pointer-events-none"
+                            : "hover:border-primary/60 hover:bg-accent"
+                        )}
+                      >
+                        {st}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </>

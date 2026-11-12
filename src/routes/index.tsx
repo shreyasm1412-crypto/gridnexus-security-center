@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useState, useEffect } from "react";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, PieChart, Pie, Cell } from "recharts";
-import { Dot, Metric, Panel, PageHeading } from "@/components/soc";
+import { Dot, Metric, Panel, PageHeading, riskTone, toneText } from "@/components/soc";
 import { commandMetrics, gridPerformance, gridStatus, recentEvents, securityOverview } from "@/data/mock";
+import { fetchDashboard, type DashboardData } from "@/lib/api";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -18,31 +20,97 @@ export const Route = createFileRoute("/")({
 const tooltipStyle = { background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 6, fontSize: 12 };
 
 function CommandCenter() {
+  const [data, setData] = useState<DashboardData>({
+    gridHealth: commandMetrics.gridHealth,
+    securityStatus: "Secure",
+    connectedDevices: commandMetrics.connectedDevices,
+    activeThreats: commandMetrics.activeThreats,
+    overallRisk: commandMetrics.riskScore,
+    securityOverview,
+    recentEvents,
+    gridStatus,
+    gridPerformance,
+    activeAttack: "normal",
+    activeTarget: null,
+  });
+
+  useEffect(() => {
+    let mounted = true;
+    const poll = async () => {
+      try {
+        const res = await fetchDashboard();
+        if (mounted && res) {
+          setData(res);
+        }
+      } catch (err) {
+        console.warn("Polling /api/dashboard failed:", err);
+      }
+    };
+
+    poll();
+    const interval = setInterval(poll, 2000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const isSecure = data.securityStatus === "Secure";
   const donut = [
-    { name: "Normal", value: securityOverview.normal, color: "var(--safe)" },
-    { name: "Suspicious", value: securityOverview.suspicious * 40, color: "var(--warn)" },
+    { name: "Normal", value: data.securityOverview.normal, color: "var(--safe)" },
+    { name: "Suspicious", value: data.securityOverview.suspicious * 40, color: "var(--warn)" },
   ];
+
+  const riskLabel =
+    data.overallRisk <= 24 ? "Low" : data.overallRisk <= 49 ? "Medium" : data.overallRisk <= 74 ? "High" : "Critical";
+
   return (
     <div className="space-y-6">
       <PageHeading title="Command Center" subtitle="Smart grid operations and security overview" />
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
-        <Metric label="Grid Health" value={`${commandMetrics.gridHealth}%`} sub={<span className="text-safe">Status: Stable</span>} />
-        <Metric label="Security Status" value={<span className="flex items-center gap-2 text-safe"><Dot status="normal" />Secure</span>} sub="All controls active" />
-        <Metric label="Connected Devices" value={commandMetrics.connectedDevices} sub="All reporting" />
-        <Metric label="Active Threats" value={commandMetrics.activeThreats} sub="Last 24h" />
-        <Metric label="Overall Risk" value={<span className="text-safe">Low</span>} sub={`${commandMetrics.riskScore}/100`} />
+        <Metric
+          label="Grid Health"
+          value={`${data.gridHealth}%`}
+          sub={
+            <span className={data.gridHealth >= 90 ? "text-safe" : data.gridHealth >= 80 ? "text-warn" : "text-critical"}>
+              Status: {data.gridHealth >= 90 ? "Stable" : "Degraded"}
+            </span>
+          }
+        />
+        <Metric
+          label="Security Status"
+          value={
+            <span className={`flex items-center gap-2 ${isSecure ? "text-safe" : "text-critical"}`}>
+              <Dot status={isSecure ? "normal" : "threat"} />
+              {data.securityStatus}
+            </span>
+          }
+          sub={isSecure ? "All controls active" : "Active mitigation required"}
+        />
+        <Metric label="Connected Devices" value={data.connectedDevices} sub="All reporting" />
+        <Metric
+          label="Active Threats"
+          value={data.activeThreats}
+          tone={data.activeThreats > 0 ? "threat" : undefined}
+          sub="Last 24h"
+        />
+        <Metric
+          label="Overall Risk"
+          value={<span className={toneText[riskTone(data.overallRisk)]}>{riskLabel}</span>}
+          sub={`${data.overallRisk}/100`}
+        />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-3">
         <Panel title="Live Grid Performance" className="xl:col-span-2">
           <div className="h-72">
             <ResponsiveContainer>
-              <LineChart data={gridPerformance} margin={{ left: -10, right: 4 }}>
+              <LineChart data={data.gridPerformance} margin={{ left: -10, right: 4 }}>
                 <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="time" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} interval={3} />
-                <YAxis yAxisId="v" domain={[220, 240]} stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis yAxisId="l" orientation="right" domain={[80, 200]} stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
-                <YAxis yAxisId="f" hide domain={[49.8, 50.2]} />
+                <YAxis yAxisId="v" domain={[210, 260]} stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
+                <YAxis yAxisId="l" orientation="right" domain={[80, 220]} stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
+                <YAxis yAxisId="f" hide domain={[49.5, 50.8]} />
                 <Tooltip contentStyle={tooltipStyle} />
                 <Legend iconType="plainline" wrapperStyle={{ fontSize: 12 }} />
                 <Line yAxisId="v" dataKey="voltage" name="Voltage (V)" stroke="var(--chart-1)" dot={false} strokeWidth={2} />
@@ -56,9 +124,9 @@ function CommandCenter() {
         <Panel title="Security Monitoring">
           <div className="space-y-2">
             {[
-              ["Normal Events", securityOverview.normal.toLocaleString(), "normal"],
-              ["Suspicious Events", securityOverview.suspicious, "warning"],
-              ["Critical Threats", securityOverview.critical, "offline"],
+              ["Normal Events", data.securityOverview.normal.toLocaleString(), "normal"],
+              ["Suspicious Events", data.securityOverview.suspicious, "warning"],
+              ["Critical Threats", data.securityOverview.critical, "offline"],
             ].map(([l, v, s]) => (
               <div key={l as string} className="flex items-center justify-between rounded-md border bg-background/40 px-3 py-2.5">
                 <span className="flex items-center gap-2 text-sm text-muted-foreground"><Dot status={s as "normal"} />{l}</span>
@@ -75,7 +143,9 @@ function CommandCenter() {
                 </Pie>
               </PieChart>
             </ResponsiveContainer>
-            <div className="absolute inset-0 flex items-center justify-center text-sm font-bold tracking-widest text-safe">SECURE</div>
+            <div className={`absolute inset-0 flex items-center justify-center text-sm font-bold tracking-widest ${isSecure ? "text-safe" : "text-critical"}`}>
+              {isSecure ? "SECURE" : "ALERT"}
+            </div>
           </div>
         </Panel>
       </div>
@@ -83,9 +153,12 @@ function CommandCenter() {
       <div className="grid gap-6 xl:grid-cols-2">
         <Panel title="Recent Security Events">
           <ul className="divide-y">
-            {recentEvents.map((e) => (
+            {data.recentEvents.map((e) => (
               <li key={e.id} className="flex items-center justify-between py-2.5 text-sm">
-                <span className="flex items-center gap-3"><Dot status="normal" />{e.text}</span>
+                <span className="flex items-center gap-3">
+                  <Dot status={data.activeAttack !== "normal" && e.id === 2 ? "threat" : "normal"} />
+                  {e.text}
+                </span>
                 <span className="font-mono text-xs text-muted-foreground">{e.time}</span>
               </li>
             ))}
@@ -93,7 +166,7 @@ function CommandCenter() {
         </Panel>
         <Panel title="Grid Status">
           <ul className="divide-y">
-            {gridStatus.map((d) => (
+            {data.gridStatus.map((d) => (
               <li key={d} className="flex items-center justify-between py-2.5 text-sm">
                 <span>{d}</span>
                 <span className="flex items-center gap-2 text-xs text-safe"><Dot status="normal" />Operational</span>

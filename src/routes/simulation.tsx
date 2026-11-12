@@ -26,14 +26,21 @@ const cards: { key: AttackKey; icon: typeof Activity }[] = [
 ];
 
 function Simulation() {
-  const { attack, setAttack } = useSimulation();
+  const { attack, setAttack, simData } = useSimulation();
   const sc = attackScenarios[attack];
   const isNormal = attack === "normal";
 
-  const healthTone: Status = sc.gridHealth >= 90 ? "normal" : sc.gridHealth >= 80 ? "warning" : "threat";
-  const latTone: Status = sc.latency < 30 ? "normal" : sc.latency < 100 ? "warning" : "threat";
-  const confTone: Status = sc.confidence === 0 ? "normal" : sc.confidence >= 85 ? "threat" : "warning";
-  const riskTone: Status = sc.risk < 40 ? "normal" : sc.risk < 75 ? "warning" : "threat";
+  // Use live backend values if available, else fallback to mock scenario
+  const gridHealth = simData?.grid_health ?? sc.gridHealth;
+  const latency = simData?.latency ?? sc.latency;
+  const confidence = simData?.confidence ?? sc.confidence;
+  const risk = simData?.risk ?? sc.risk;
+  const currentStage = simData?.stage ?? sc.stage;
+
+  const healthTone: Status = gridHealth >= 90 ? "normal" : gridHealth >= 80 ? "warning" : "threat";
+  const latTone: Status = latency < 30 ? "normal" : latency < 100 ? "warning" : "threat";
+  const confTone: Status = confidence === 0 ? "normal" : confidence >= 85 ? "threat" : "warning";
+  const riskTone: Status = risk < 40 ? "normal" : risk < 75 ? "warning" : "threat";
 
   return (
     <div className="space-y-6">
@@ -69,7 +76,7 @@ function Simulation() {
               key={key}
               onClick={() => setAttack(key)}
               className={cn(
-                "rounded-lg border bg-card p-5 text-left shadow-sm transition-colors hover:border-primary/60",
+                "rounded-lg border bg-card p-5 text-left shadow-sm transition-colors hover:border-primary/60 cursor-pointer",
                 active && (key === "normal" ? "border-safe/70 bg-safe/5" : "border-critical/70 bg-critical/5"),
               )}
             >
@@ -84,8 +91,8 @@ function Simulation() {
       <Panel title="Simulation Flow">
         <div className="flex flex-wrap items-center gap-2">
           {simulationStages.map((st, i) => {
-            const reached = i <= sc.stage;
-            const current = i === sc.stage;
+            const reached = i <= currentStage;
+            const current = i === currentStage;
             return (
               <div key={st} className="flex items-center gap-2">
                 <div
@@ -99,7 +106,7 @@ function Simulation() {
                 >
                   {st.toUpperCase()}
                 </div>
-                {i < simulationStages.length - 1 && <ChevronRight className={cn("h-4 w-4", i < sc.stage ? "text-primary" : "text-muted-foreground/50")} />}
+                {i < simulationStages.length - 1 && <ChevronRight className={cn("h-4 w-4", i < currentStage ? "text-primary" : "text-muted-foreground/50")} />}
               </div>
             );
           })}
@@ -107,10 +114,10 @@ function Simulation() {
       </Panel>
 
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <LiveMetric label="Grid Health" value={`${sc.gridHealth}%`} tone={healthTone} />
-        <LiveMetric label="Network Latency" value={`${sc.latency} ms`} tone={latTone} />
-        <LiveMetric label="Threat Confidence" value={`${sc.confidence}%`} tone={confTone} />
-        <LiveMetric label="Risk Score" value={`${sc.risk}/100`} tone={riskTone} />
+        <LiveMetric label="Grid Health" value={`${gridHealth}%`} tone={healthTone} />
+        <LiveMetric label="Network Latency" value={`${latency} ms`} tone={latTone} />
+        <LiveMetric label="Threat Confidence" value={`${confidence}%`} tone={confTone} />
+        <LiveMetric label="Risk Score" value={`${risk}/100`} tone={riskTone} />
       </div>
     </div>
   );

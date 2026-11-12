@@ -1,9 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Metric, PageHeading, Panel, SeverityBadge, StatusPill, riskTone, toneText } from "@/components/soc";
-import { alerts, threatSummary, type Alert } from "@/data/mock";
+import { alerts as mockAlerts, threatSummary, type Alert } from "@/data/mock";
+import { fetchAlerts } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/threats")({
@@ -19,15 +20,41 @@ export const Route = createFileRoute("/threats")({
 });
 
 function Threats() {
+  const [alertsList, setAlertsList] = useState<Alert[]>(mockAlerts);
   const [sel, setSel] = useState<Alert | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const poll = async () => {
+      try {
+        const data = await fetchAlerts();
+        if (mounted && data) {
+          setAlertsList(data);
+        }
+      } catch (err) {
+        console.warn("Polling /api/alerts failed:", err);
+      }
+    };
+    poll();
+    const interval = setInterval(poll, 2000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const totalDetected = alertsList.length;
+  const highRiskCount = alertsList.filter((a) => a.severity === "HIGH").length;
+  const criticalCount = alertsList.filter((a) => a.severity === "CRITICAL").length;
+
   return (
     <div className="space-y-6">
       <PageHeading title="Threat Detection Center" subtitle="Correlated alerts from rule-based and machine learning detectors" />
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-        <Metric label="Total Events" value={threatSummary.total.toLocaleString()} />
-        <Metric label="Threats Detected" value={threatSummary.detected} tone="warning" />
-        <Metric label="High Risk" value={threatSummary.high} tone="threat" />
-        <Metric label="Critical" value={threatSummary.critical} />
+        <Metric label="Total Events" value={(threatSummary.total + totalDetected - 3).toLocaleString()} />
+        <Metric label="Threats Detected" value={totalDetected} tone="warning" />
+        <Metric label="High Risk" value={highRiskCount} tone="threat" />
+        <Metric label="Critical" value={criticalCount} tone={criticalCount > 0 ? "threat" : undefined} />
       </div>
       <Panel title="Active Alerts">
         <div className="overflow-x-auto">
@@ -40,7 +67,7 @@ function Threats() {
               </tr>
             </thead>
             <tbody>
-              {alerts.map((a) => (
+              {alertsList.map((a) => (
                 <tr key={a.id} onClick={() => setSel(a)} className="cursor-pointer border-b last:border-0 hover:bg-accent/50">
                   <td className="px-3 py-3 font-mono text-xs text-primary">{a.id}</td>
                   <td className="px-3 py-3 font-mono text-xs text-muted-foreground">{a.time}</td>
