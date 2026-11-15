@@ -1,15 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Metric, PageHeading, Panel, SeverityBadge, StatusPill, riskTone, toneText } from "@/components/soc";
-import { alerts as mockAlerts, threatSummary, type Alert } from "@/data/mock";
-import { fetchAlerts } from "@/lib/api";
+import { threatSummary, type Alert } from "@/data/mock";
+import { useSimulation } from "@/lib/simulation";
+import { getRiskSeverity } from "@/lib/risk";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/threats")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Threat Detection — GridNexus AI" },
       { name: "description", content: "AI-assisted detection of cyber threats across smart grid devices." },
       { property: "og:title", content: "Threat Detection — GridNexus AI" },
@@ -20,32 +23,12 @@ export const Route = createFileRoute("/threats")({
 });
 
 function Threats() {
-  const [alertsList, setAlertsList] = useState<Alert[]>(mockAlerts);
+  const { alertsList } = useSimulation();
   const [sel, setSel] = useState<Alert | null>(null);
 
-  useEffect(() => {
-    let mounted = true;
-    const poll = async () => {
-      try {
-        const data = await fetchAlerts();
-        if (mounted && data) {
-          setAlertsList(data);
-        }
-      } catch (err) {
-        console.warn("Polling /api/alerts failed:", err);
-      }
-    };
-    poll();
-    const interval = setInterval(poll, 2000);
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, []);
-
   const totalDetected = alertsList.length;
-  const highRiskCount = alertsList.filter((a) => a.severity === "HIGH").length;
-  const criticalCount = alertsList.filter((a) => a.severity === "CRITICAL").length;
+  const highRiskCount = alertsList.filter((a) => getRiskSeverity(a.risk) === "HIGH").length;
+  const criticalCount = alertsList.filter((a) => getRiskSeverity(a.risk) === "CRITICAL").length;
 
   return (
     <div className="space-y-6">
@@ -53,7 +36,7 @@ function Threats() {
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         <Metric label="Total Events" value={(threatSummary.total + totalDetected - 3).toLocaleString()} />
         <Metric label="Threats Detected" value={totalDetected} tone="warning" />
-        <Metric label="High Risk" value={highRiskCount} tone="threat" />
+        <Metric label="High Risk" value={highRiskCount} tone="high" />
         <Metric label="Critical" value={criticalCount} tone={criticalCount > 0 ? "threat" : undefined} />
       </div>
       <Panel title="Active Alerts">
@@ -68,14 +51,14 @@ function Threats() {
             </thead>
             <tbody>
               {alertsList.map((a) => (
-                <tr key={a.id} onClick={() => setSel(a)} className="cursor-pointer border-b last:border-0 hover:bg-accent/50">
+                <tr key={a.id} onClick={() => setSel(a)} tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSel(a); } }} aria-label={`Detection details ${a.id}`} className="cursor-pointer border-b last:border-0 hover:bg-accent/50">
                   <td className="px-3 py-3 font-mono text-xs text-primary">{a.id}</td>
                   <td className="px-3 py-3 font-mono text-xs text-muted-foreground">{a.time}</td>
                   <td className="px-3 py-3 font-mono text-xs">{a.device}</td>
                   <td className="whitespace-nowrap px-3 py-3">{a.type}</td>
                   <td className="whitespace-nowrap px-3 py-3 text-muted-foreground">{a.method}</td>
                   <td className="px-3 py-3 tabular-nums">{a.confidence}%</td>
-                  <td className="px-3 py-3"><SeverityBadge severity={a.severity} /></td>
+                  <td className="px-3 py-3"><SeverityBadge severity={getRiskSeverity(a.risk)} /></td>
                   <td className="px-3 py-3"><StatusPill status={a.status} /></td>
                 </tr>
               ))}
@@ -85,32 +68,36 @@ function Threats() {
       </Panel>
 
       <Sheet open={!!sel} onOpenChange={(o) => !o && setSel(null)}>
-        <SheetContent className="w-[420px] overflow-y-auto sm:max-w-md">
+        <SheetContent className="w-[420px] max-w-full overflow-y-auto sm:max-w-md">
           {sel && (
             <>
               <SheetHeader>
-                <SheetTitle className="flex items-center gap-3"><span className="font-mono">{sel.id}</span><SeverityBadge severity={sel.severity} /></SheetTitle>
+                <SheetTitle className="flex items-center gap-3"><span>Detection Details</span><SeverityBadge severity={getRiskSeverity(sel.risk)} /></SheetTitle>
               </SheetHeader>
               <div className="space-y-6 px-4 pb-6">
-                <Section title="Threat Summary">
+                <Section title="Threat Analysis">
                   <div className="mb-1 text-sm font-medium">{sel.type} · <span className="font-mono">{sel.device}</span></div>
                   <p className="text-sm leading-relaxed text-muted-foreground">{sel.summary}</p>
                 </Section>
-                <Section title="Detection Evidence">
+                <Section title="Triggered Rules">
                   <ul className="space-y-2">
-                    {sel.evidence.map((e) => (
+                    {sel.triggeredRules.map((e) => (
                       <li key={e} className="flex gap-2 rounded-md border bg-background/40 px-3 py-2 text-sm"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-warn" />{e}</li>
                     ))}
                   </ul>
                 </Section>
+                <dl className="divide-y text-sm">
+                  {[["Device", sel.device], ["Threat Type", sel.type], ["Isolation Forest Anomaly Score", sel.anomalyScore.toFixed(2)], ["Random Forest Classification Confidence", `${sel.classificationConfidence}%`], ["Final Detection Method", sel.method], ["Final Result", sel.type]].map(([label, value]) => <div key={label} className="flex justify-between gap-4 py-2"><dt className="text-muted-foreground">{label}</dt><dd className="text-right font-medium">{value}</dd></div>)}
+                </dl>
                 <div className="grid grid-cols-2 gap-3">
-                  <Section title="AI Confidence">
+                  <Section title="Final Confidence">
                     <div className="text-2xl font-semibold tabular-nums">{sel.confidence}%</div>
                     <div className="mt-2 h-1.5 rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${sel.confidence}%` }} /></div>
                     <div className="mt-1 text-[11px] text-muted-foreground">{sel.method}</div>
                   </Section>
                   <Section title="Risk Score">
                     <div className={cn("text-2xl font-semibold tabular-nums", toneText[riskTone(sel.risk)])}>{sel.risk}<span className="text-sm text-muted-foreground">/100</span></div>
+                    <div className={cn("mt-1 text-xs font-semibold", toneText[riskTone(sel.risk)])}>{getRiskSeverity(sel.risk)}</div>
                   </Section>
                 </div>
                 <Section title="Recommended Response">

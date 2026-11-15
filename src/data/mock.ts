@@ -49,13 +49,16 @@ export type GridNode = {
   power: string;
   latency: number;
   risk: number;
+  packetRate: number;
+  packetLoss: number;
+  failedLogins: number;
 };
 
 export const topologyNodes: GridNode[] = [
-  { id: "PS-01", label: "Power Source", type: "Power Source", voltage: "132 kV", current: "1,210 A", frequency: "50.00 Hz", power: "160 MW", latency: 6, risk: 4 },
-  { id: "SUB-01", label: "Main Substation", type: "Substation", voltage: "33 kV", current: "2,840 A", frequency: "50.01 Hz", power: "158 MW", latency: 9, risk: 8 },
-  { id: "FDR-A", label: "Feeder A", type: "Feeder", voltage: "11 kV", current: "4,120 A", frequency: "50.00 Hz", power: "78 MW", latency: 12, risk: 10 },
-  { id: "FDR-B", label: "Feeder B", type: "Feeder", voltage: "11 kV", current: "4,050 A", frequency: "49.99 Hz", power: "77 MW", latency: 13, risk: 9 },
+  { id: "PS-01", label: "Power Source", type: "Power Source", voltage: "132 kV", current: "1,210 A", frequency: "50.00 Hz", power: "160 MW", latency: 6, risk: 4, packetRate: 120, packetLoss: 0.1, failedLogins: 0 },
+  { id: "SUB-01", label: "Main Substation", type: "Substation", voltage: "33 kV", current: "2,840 A", frequency: "50.01 Hz", power: "158 MW", latency: 9, risk: 8, packetRate: 180, packetLoss: 0.1, failedLogins: 0 },
+  { id: "FDR-A", label: "Feeder A", type: "Feeder", voltage: "11 kV", current: "4,120 A", frequency: "50.00 Hz", power: "78 MW", latency: 12, risk: 10, packetRate: 160, packetLoss: 0.1, failedLogins: 0 },
+  { id: "FDR-B", label: "Feeder B", type: "Feeder", voltage: "11 kV", current: "4,050 A", frequency: "49.99 Hz", power: "77 MW", latency: 13, risk: 9, packetRate: 160, packetLoss: 0.1, failedLogins: 0 },
   ...["01", "02", "03", "04", "05", "06"].map((n, i) => ({
     id: `SM-${n}`,
     label: `Smart Meter ${n}`,
@@ -66,6 +69,9 @@ export const topologyNodes: GridNode[] = [
     power: `${(4.1 + i * 0.3).toFixed(1)} kW`,
     latency: 18 + i * 2,
     risk: 6 + i,
+    packetRate: 150,
+    packetLoss: 0.1,
+    failedLogins: 0,
   })),
 ];
 
@@ -84,19 +90,24 @@ export type Alert = {
   summary: string;
   evidence: string[];
   response: string[];
+  triggeredRules: string[];
+  anomalyScore: number;
+  classificationConfidence: number;
 };
 
 export const alerts: Alert[] = [
   {
     id: "ALT-2041", time: "13:21:44", device: "SM-04", type: "False Data Injection", method: "Hybrid Detection",
-    confidence: 91, severity: "HIGH", status: "Investigating", risk: 78,
+    confidence: 91, severity: "CRITICAL", status: "Investigating", risk: 78,
+    triggeredRules: ["Voltage deviation exceeds 5%", "Feeder power balance mismatch"], anomalyScore: 0.91, classificationConfidence: 94,
     summary: "Reported consumption from SM-04 diverges from feeder-level measurements, consistent with manipulated telemetry.",
     evidence: ["Voltage reading deviates 8.2% from Feeder A baseline", "Power balance mismatch of 3.4 kW across feeder", "Reading pattern outside 99th percentile (Isolation Forest)", "Timestamp sequence irregularity detected"],
     response: ["Flag suspicious data", "Isolate affected device", "Switch to trusted telemetry"],
   },
   {
     id: "ALT-2038", time: "12:58:10", device: "FDR-B", type: "Denial of Service", method: "Rule Engine",
-    confidence: 76, severity: "MEDIUM", status: "Contained", risk: 54,
+    confidence: 76, severity: "HIGH", status: "Contained", risk: 54,
+    triggeredRules: ["Packet rate exceeds baseline", "Network latency exceeds 50 ms"], anomalyScore: 0.79, classificationConfidence: 82,
     summary: "Burst of malformed polling requests targeted the Feeder B gateway, raising communication latency.",
     evidence: ["Request rate 6.1× above normal", "Network latency rose from 13 ms to 64 ms", "Repeated requests from a single source address"],
     response: ["Limit suspicious traffic", "Prioritize critical communication", "Generate security alert"],
@@ -104,6 +115,7 @@ export const alerts: Alert[] = [
   {
     id: "ALT-2033", time: "11:42:37", device: "SM-02", type: "Unknown Anomaly", method: "Isolation Forest",
     confidence: 62, severity: "LOW", status: "Resolved", risk: 22,
+    triggeredRules: ["Reporting interval irregularity"], anomalyScore: 0.61, classificationConfidence: 58,
     summary: "Short-lived irregular reporting interval on SM-02; no evidence of malicious intent after review.",
     evidence: ["Reporting interval varied by ±40 s", "Anomaly score 0.61 (threshold 0.58)", "No correlated events on neighbouring meters"],
     response: ["Monitor device for recurrence", "Verify firmware integrity", "Close after observation window"],
@@ -129,7 +141,7 @@ export const attackScenarios: Record<AttackKey, {
 };
 
 export const simulationStages = [
-  "Normal Operation", "Attack Initiated", "Anomaly Detected", "AI Analysis", "Threat Classified", "Response Initiated",
+  "Normal Telemetry", "Attack Simulation Started", "Telemetry Changes", "Threat Detected", "Incident Created",
 ];
 
 export type Incident = {
@@ -143,11 +155,11 @@ export type Incident = {
 };
 
 export const incidents: Incident[] = [
-  { id: "INC-0117", type: "False Data Injection", device: "SM-04", severity: "HIGH", time: "2026-11-02 13:21", risk: 78, status: "Investigating" },
+  { id: "INC-0117", type: "False Data Injection", device: "SM-04", severity: "CRITICAL", time: "2026-11-02 13:21", risk: 78, status: "Investigating" },
   { id: "INC-0116", type: "Unauthorized Access", device: "SUB-01", severity: "HIGH", time: "2026-11-02 12:05", risk: 71, status: "Open" },
-  { id: "INC-0115", type: "Denial of Service", device: "FDR-B", severity: "MEDIUM", time: "2026-11-02 10:48", risk: 54, status: "Contained" },
+  { id: "INC-0115", type: "Denial of Service", device: "FDR-B", severity: "HIGH", time: "2026-11-02 10:48", risk: 54, status: "Contained" },
   { id: "INC-0114", type: "False Data Injection", device: "SM-06", severity: "MEDIUM", time: "2026-11-01 22:16", risk: 46, status: "Resolved" },
-  { id: "INC-0113", type: "Denial of Service", device: "FDR-A", severity: "LOW", time: "2026-11-01 17:39", risk: 28, status: "Resolved" },
+  { id: "INC-0113", type: "Denial of Service", device: "FDR-A", severity: "MEDIUM", time: "2026-11-01 17:39", risk: 28, status: "Resolved" },
 ];
 
 export const incidentResponses: Record<Incident["type"], string[]> = {
@@ -178,3 +190,26 @@ export const systemStatus = [
   { label: "Connected Devices", value: "24", status: "normal" as Status },
   { label: "Security Status", value: "Secure", status: "normal" as Status },
 ];
+
+export type Telemetry = Pick<GridNode, "voltage" | "current" | "frequency" | "power" | "latency" | "packetRate" | "packetLoss" | "failedLogins">;
+export type SimulationRequest = { deviceId: string; attack: AttackKey };
+export type SimulationResult = {
+  request: SimulationRequest;
+  telemetry: Telemetry;
+  gridHealth: number;
+  detection: Alert | null;
+  incident: Incident | null;
+};
+
+export const simulationTargets = ["SM-01", "SM-02", "SM-03", "SM-04", "SM-05", "SM-06", "FDR-A", "FDR-B"];
+export const simulationAnalysis: Record<Exclude<AttackKey, "normal">, { anomalyScore: number; classificationConfidence: number; triggeredRules: string[] }> = {
+  fdi: { anomalyScore: 0.91, classificationConfidence: 94, triggeredRules: ["Voltage deviation exceeds 5%", "Power measurement diverges from feeder baseline"] },
+  dos: { anomalyScore: 0.89, classificationConfidence: 90, triggeredRules: ["Packet rate exceeds baseline by 20×", "Network latency exceeds 100 ms", "Packet loss exceeds 5%"] },
+  ua: { anomalyScore: 0.84, classificationConfidence: 87, triggeredRules: ["Failed login attempts exceed 5", "Abnormal authentication request rate"] },
+};
+export const simulationTelemetryChanges: Record<AttackKey, Partial<Telemetry>> = {
+  normal: {},
+  fdi: { latency: 48, packetRate: 190, packetLoss: 0.8 },
+  dos: { latency: 286, packetRate: 4200, packetLoss: 18.6 },
+  ua: { latency: 21, packetRate: 380, packetLoss: 1.2, failedLogins: 17 },
+};

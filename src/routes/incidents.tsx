@@ -1,15 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Metric, PageHeading, SeverityBadge, StatusPill, riskTone, toneText } from "@/components/soc";
-import { incidentResponses, incidentStages, incidents as mockIncidents, type Incident } from "@/data/mock";
-import { fetchIncidents, updateIncidentStatus } from "@/lib/api";
+import { incidentResponses, incidentStages, type Incident } from "@/data/mock";
+import { useSimulation } from "@/lib/simulation";
+import { getRiskSeverity } from "@/lib/risk";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/incidents")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Incident Management — GridNexus AI" },
       { name: "description", content: "Track and respond to smart grid security incidents." },
       { property: "og:title", content: "Incident Management — GridNexus AI" },
@@ -22,52 +26,14 @@ export const Route = createFileRoute("/incidents")({
 const stageIndex: Record<Incident["status"], number> = { Open: 0, Investigating: 1, Contained: 2, Resolved: 3 };
 
 function Incidents() {
-  const [incidentsList, setIncidentsList] = useState<Incident[]>(mockIncidents);
+  const { incidentsList, updateStatus } = useSimulation();
   const [sel, setSel] = useState<Incident | null>(null);
 
-  useEffect(() => {
-    let mounted = true;
-    const poll = async () => {
-      try {
-        const data = await fetchIncidents();
-        if (mounted && data) {
-          setIncidentsList(data);
-          // Keep sel synced if selected
-          if (sel) {
-            const freshSel = data.find((x) => x.id === sel.id);
-            if (freshSel) setSel(freshSel);
-          }
-        }
-      } catch (err) {
-        console.warn("Polling /api/incidents failed:", err);
-      }
-    };
-    poll();
-    const interval = setInterval(poll, 2000);
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, [sel?.id]);
-
-  const count = (s: Incident["status"]) => incidentsList.filter((i) => i.status === s).length;
-
-  const handleStatusChange = async (newStatus: Incident["status"]) => {
+  const count = (status: Incident["status"]) => incidentsList.filter((incident) => incident.status === status).length;
+  const handleStatusChange = (status: Incident["status"]) => {
     if (!sel) return;
-    try {
-      const updated = await updateIncidentStatus(sel.id, newStatus);
-      if (updated) {
-        setSel(updated);
-        setIncidentsList((prev) => prev.map((item) => (item.id === sel.id ? updated : item)));
-      } else {
-        // Optimistic update if backend offline
-        const updatedLocal = { ...sel, status: newStatus };
-        setSel(updatedLocal);
-        setIncidentsList((prev) => prev.map((item) => (item.id === sel.id ? updatedLocal : item)));
-      }
-    } catch (err) {
-      console.warn("Updating incident status failed:", err);
-    }
+    updateStatus(sel.id, status);
+    setSel({ ...sel, status });
   };
 
   return (
@@ -82,28 +48,29 @@ function Incidents() {
 
       <div className="space-y-3">
         {incidentsList.map((i) => (
-          <button
+          <Button
+            variant="outline"
             key={i.id}
             onClick={() => setSel(i)}
-            className="grid w-full grid-cols-2 items-center gap-4 rounded-lg border bg-card px-5 py-4 text-left shadow-sm transition-colors hover:border-primary/60 md:grid-cols-7"
+            className="grid h-auto whitespace-normal w-full grid-cols-2 items-center gap-4 rounded-lg border bg-card px-5 py-4 text-left shadow-sm transition-colors hover:border-primary/60 md:grid-cols-7"
           >
             <Field label="Incident ID"><span className="font-mono text-primary">{i.id}</span></Field>
             <Field label="Threat Type">{i.type}</Field>
             <Field label="Affected Device"><span className="font-mono">{i.device}</span></Field>
-            <Field label="Severity"><SeverityBadge severity={i.severity} /></Field>
+            <Field label="Severity"><SeverityBadge severity={getRiskSeverity(i.risk)} /></Field>
             <Field label="Detection Time"><span className="font-mono text-xs">{i.time}</span></Field>
-            <Field label="Risk Score"><span className={toneText[riskTone(i.risk)]}>{i.risk}/100</span></Field>
+            <Field label="Risk Score"><span className={toneText[riskTone(i.risk)]}>{i.risk}/100 · {getRiskSeverity(i.risk)}</span></Field>
             <Field label="Current Status"><StatusPill status={i.status} /></Field>
-          </button>
+          </Button>
         ))}
       </div>
 
       <Sheet open={!!sel} onOpenChange={(o) => !o && setSel(null)}>
-        <SheetContent className="w-[400px] overflow-y-auto sm:max-w-md">
+        <SheetContent className="w-[400px] max-w-full overflow-y-auto sm:max-w-md">
           {sel && (
             <>
               <SheetHeader>
-                <SheetTitle className="flex items-center gap-3"><span className="font-mono">{sel.id}</span><SeverityBadge severity={sel.severity} /></SheetTitle>
+                <SheetTitle className="flex items-center gap-3"><span className="font-mono">{sel.id}</span><SeverityBadge severity={getRiskSeverity(sel.risk)} /></SheetTitle>
                 <p className="text-sm text-muted-foreground">{sel.type} · <span className="font-mono">{sel.device}</span></p>
               </SheetHeader>
               <div className="space-y-6 px-4 pb-6">
@@ -134,7 +101,9 @@ function Incidents() {
                   <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Update Incident Status</h3>
                   <div className="flex flex-wrap gap-2">
                     {(["Open", "Investigating", "Contained", "Resolved"] as Incident["status"][]).map((st) => (
-                      <button
+                      <Button
+                        variant="outline"
+                        size="sm"
                         key={st}
                         disabled={sel.status === st}
                         onClick={() => handleStatusChange(st)}
@@ -146,7 +115,7 @@ function Incidents() {
                         )}
                       >
                         {st}
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 </div>

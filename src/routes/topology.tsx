@@ -1,16 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Zap, Building2, GitBranch, Gauge } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Dot, PageHeading, Panel, riskTone, toneText } from "@/components/soc";
-import { attackScenarios, topologyNodes as mockNodes, type GridNode, type Status } from "@/data/mock";
+import { Dot, PageHeading, Panel, toneText } from "@/components/soc";
+import { topologyNodes as mockNodes, type GridNode, type Status } from "@/data/mock";
 import { useSimulation } from "@/lib/simulation";
-import { fetchTopology } from "@/lib/api";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/topology")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Grid Topology — GridNexus AI" },
       { name: "description", content: "Interactive digital twin of the simulated smart grid infrastructure." },
       { property: "og:title", content: "Grid Topology — GridNexus AI" },
@@ -36,31 +38,10 @@ const icons = { "Power Source": Zap, Substation: Building2, Feeder: GitBranch, "
 const statusLabel: Record<Status, string> = { normal: "Normal", warning: "Warning", threat: "Threat", offline: "Offline" };
 
 function Topology() {
-  const { attack } = useSimulation();
-  const [nodes, setNodes] = useState<GridNode[]>(mockNodes);
+  const { target, result } = useSimulation();
+  const nodes = mockNodes;
   const [selected, setSelected] = useState<GridNode | null>(null);
 
-  useEffect(() => {
-    let mounted = true;
-    const poll = async () => {
-      try {
-        const res = await fetchTopology();
-        if (mounted && res?.nodes && res.nodes.length > 0) {
-          setNodes(res.nodes);
-        }
-      } catch (err) {
-        console.warn("Polling /api/grid/topology failed:", err);
-      }
-    };
-    poll();
-    const interval = setInterval(poll, 2000);
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, []);
-
-  const target = attackScenarios[attack].target;
   const parent = edges.find(([, c]) => c === target)?.[0];
   const statusOf = (id: string): Status => (id === target ? "threat" : id === parent ? "warning" : "normal");
 
@@ -100,12 +81,13 @@ function Topology() {
             const s = statusOf(n.id);
             const Icon = icons[n.type];
             return (
-              <button
+              <Button
+                variant="outline"
                 key={n.id}
                 onClick={() => setSelected(n)}
                 style={{ left: `${x / 10}%`, top: `${(y / 560) * 100}%` }}
                 className={cn(
-                  "absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-md border bg-card px-3 py-2 text-left shadow-md transition-colors hover:border-primary cursor-pointer",
+                  "absolute h-auto flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-md border bg-card px-3 py-2 text-left shadow-md transition-colors hover:border-primary cursor-pointer",
                   s === "threat" && "border-critical/70",
                   s === "warning" && "border-warn/60",
                 )}
@@ -116,27 +98,28 @@ function Topology() {
                   <div className="hidden text-[10px] text-muted-foreground sm:block">{n.type === "Smart Meter" ? "Smart Meter" : n.id}</div>
                 </div>
                 <Dot status={s} className="ml-1" />
-              </button>
+              </Button>
             );
           })}
         </div>
       </Panel>
 
       <Sheet open={!!currentSelected} onOpenChange={(o) => !o && setSelected(null)}>
-        <SheetContent className="w-[360px] sm:max-w-sm">
+        <SheetContent className="w-[360px] max-w-full overflow-y-auto sm:max-w-sm">
           {currentSelected && (() => {
             const s = statusOf(currentSelected.id);
-            const risk = s === "threat" ? attackScenarios[attack].risk : s === "warning" ? 48 : currentSelected.risk;
+            const telemetry = currentSelected.id === target ? result.telemetry : currentSelected;
             const rows: [string, React.ReactNode][] = [
               ["Device ID", <span className="font-mono">{currentSelected.id}</span>],
-              ["Device Type", currentSelected.type],
-              ["Voltage", currentSelected.voltage],
-              ["Current", currentCurrentFormatted(currentSelected.current)],
-              ["Frequency", currentSelected.frequency],
-              ["Power", currentSelected.power],
-              ["Network Latency", `${s === "threat" ? attackScenarios[attack].latency : currentSelected.latency} ms`],
-              ["Security Status", <span className={cn("flex items-center gap-2", toneText[s])}><Dot status={s} />{statusLabel[s]}</span>],
-              ["Risk Score", <span className={toneText[riskTone(risk)]}>{risk}/100</span>],
+              ["Device Status", <span className={cn("flex items-center gap-2", toneText[s])}><Dot status={s} />{statusLabel[s]}</span>],
+              ["Voltage", telemetry.voltage],
+              ["Current", telemetry.current],
+              ["Frequency", telemetry.frequency],
+              ["Power", telemetry.power],
+              ["Network Latency", `${telemetry.latency} ms`],
+              ["Packet Rate", `${telemetry.packetRate} pkts/s`],
+              ["Packet Loss", `${telemetry.packetLoss}%`],
+              ["Failed Login Attempts", telemetry.failedLogins],
             ];
             return (
               <>
@@ -156,8 +139,4 @@ function Topology() {
       </Sheet>
     </div>
   );
-}
-
-function currentCurrentFormatted(val: string): string {
-  return val;
 }

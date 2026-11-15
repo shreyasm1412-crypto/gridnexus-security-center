@@ -33,6 +33,7 @@
   --color-safe: var(--safe);
   --color-warn: var(--warn);
   --color-critical: var(--critical);
+  --color-risk-high: var(--risk-high);
   --color-offline: var(--offline);
   --color-energy: var(--energy);
   --color-chart-1: var(--chart-1);
@@ -74,6 +75,7 @@
   --safe: oklch(0.72 0.16 152);
   --warn: oklch(0.8 0.15 80);
   --critical: oklch(0.63 0.21 25);
+  --risk-high: oklch(0.75 0.17 50);
   --offline: oklch(0.5 0.01 250);
   --energy: oklch(0.8 0.12 200);
   --chart-1: oklch(0.72 0.13 230);

@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import type { Severity, Status } from "@/data/mock";
+import type { RiskTone } from "@/lib/risk";
+export { riskTone } from "@/lib/risk";
 
 export function Panel({ title, action, className, children }: { title?: string; action?: ReactNode; className?: string; children: ReactNode }) {
   return (
@@ -16,7 +18,7 @@ export function Panel({ title, action, className, children }: { title?: string; 
   );
 }
 
-export function Metric({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: ReactNode; tone?: Status }) {
+export function Metric({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: ReactNode; tone?: RiskTone | undefined }) {
   return (
     <div className="rounded-lg border bg-card p-4 shadow-sm">
       <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</div>
@@ -26,11 +28,12 @@ export function Metric({ label, value, sub, tone }: { label: string; value: Reac
   );
 }
 
-export const toneText: Record<Status, string> = {
+export const toneText: Record<RiskTone, string> = {
   normal: "text-safe",
   warning: "text-warn",
   threat: "text-critical",
   offline: "text-offline",
+  high: "text-risk-high",
 };
 
 export function Dot({ status, className }: { status: Status; className?: string }) {
@@ -45,9 +48,9 @@ export function Dot({ status, className }: { status: Status; className?: string 
 
 export function SeverityBadge({ severity }: { severity: Severity }) {
   const map: Record<Severity, string> = {
-    LOW: "border-energy/40 text-energy bg-energy/10",
+    LOW: "border-safe/40 text-safe bg-safe/10",
     MEDIUM: "border-warn/40 text-warn bg-warn/10",
-    HIGH: "border-critical/40 text-critical bg-critical/10",
+    HIGH: "border-risk-high/40 text-risk-high bg-risk-high/10",
     CRITICAL: "border-critical bg-critical text-destructive-foreground",
   };
   return <span className={cn("inline-flex rounded border px-2 py-0.5 text-[10px] font-semibold tracking-wider", map[severity])}>{severity}</span>;
@@ -66,8 +69,4 @@ export function PageHeading({ title, subtitle }: { title: string; subtitle?: str
       {subtitle && <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>}
     </div>
   );
-}
-
-export function riskTone(risk: number): Status {
-  return risk >= 70 ? "threat" : risk >= 40 ? "warning" : "normal";
 }

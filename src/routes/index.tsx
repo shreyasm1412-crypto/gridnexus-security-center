@@ -1,13 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, PieChart, Pie, Cell } from "recharts";
 import { Dot, Metric, Panel, PageHeading, riskTone, toneText } from "@/components/soc";
 import { commandMetrics, gridPerformance, gridStatus, recentEvents, securityOverview } from "@/data/mock";
-import { fetchDashboard, type DashboardData } from "@/lib/api";
+import { useSimulation } from "@/lib/simulation";
+import { getRiskSeverity } from "@/lib/risk";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Command Center — GridNexus AI" },
       { name: "description", content: "Live smart grid health, security status and risk overview." },
       { property: "og:title", content: "Command Center — GridNexus AI" },
@@ -20,49 +22,31 @@ export const Route = createFileRoute("/")({
 const tooltipStyle = { background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 6, fontSize: 12 };
 
 function CommandCenter() {
-  const [data, setData] = useState<DashboardData>({
-    gridHealth: commandMetrics.gridHealth,
-    securityStatus: "Secure",
+  const { result, attack, target, alertsList } = useSimulation();
+  const active = result.detection !== null;
+  const latest = alertsList[0];
+  const data = {
+    gridHealth: result.gridHealth,
+    securityStatus: active ? "Threat Detected" : "Secure",
     connectedDevices: commandMetrics.connectedDevices,
-    activeThreats: commandMetrics.activeThreats,
-    overallRisk: commandMetrics.riskScore,
-    securityOverview,
-    recentEvents,
+    activeThreats: active ? 1 : 0,
+    overallRisk: result.detection?.risk ?? commandMetrics.riskScore,
+    securityOverview: { ...securityOverview, suspicious: securityOverview.suspicious + (active ? 1 : 0), critical: result.detection?.severity === "CRITICAL" ? 1 : 0 },
+    recentEvents: active ? [{ id: 2, text: `${result.detection?.type} detected on ${target}`, time: result.detection?.time ?? "" }, ...recentEvents.slice(0, 4)] : recentEvents,
     gridStatus,
-    gridPerformance,
-    activeAttack: "normal",
-    activeTarget: null,
-  });
-
-  useEffect(() => {
-    let mounted = true;
-    const poll = async () => {
-      try {
-        const res = await fetchDashboard();
-        if (mounted && res) {
-          setData(res);
-        }
-      } catch (err) {
-        console.warn("Polling /api/dashboard failed:", err);
-      }
-    };
-
-    poll();
-    const interval = setInterval(poll, 2000);
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, []);
+    gridPerformance: gridPerformance.map((point, index) => active && index >= 20 ? { ...point, voltage: attack === "fdi" ? 254 : point.voltage, frequency: attack === "fdi" ? 50.62 : point.frequency, load: attack === "fdi" ? 207 : point.load } : point),
+    activeAttack: attack,
+  };
 
   const isSecure = data.securityStatus === "Secure";
   const donut = [
     { name: "Normal", value: data.securityOverview.normal, color: "var(--safe)" },
-    { name: "Suspicious", value: data.securityOverview.suspicious * 40, color: "var(--warn)" },
+    { name: "Suspicious", value: data.securityOverview.suspicious, color: "var(--warn)" },
+    { name: "Critical", value: data.securityOverview.critical, color: "var(--critical)" },
   ];
 
   const riskLabel =
-    data.overallRisk <= 24 ? "Low" : data.overallRisk <= 49 ? "Medium" : data.overallRisk <= 74 ? "High" : "Critical";
+    getRiskSeverity(data.overallRisk);
 
   return (
     <div className="space-y-6">
@@ -126,7 +110,7 @@ function CommandCenter() {
             {[
               ["Normal Events", data.securityOverview.normal.toLocaleString(), "normal"],
               ["Suspicious Events", data.securityOverview.suspicious, "warning"],
-              ["Critical Threats", data.securityOverview.critical, "offline"],
+              ["Critical Threats", data.securityOverview.critical, data.securityOverview.critical > 0 ? "threat" : "offline"],
             ].map(([l, v, s]) => (
               <div key={l as string} className="flex items-center justify-between rounded-md border bg-background/40 px-3 py-2.5">
                 <span className="flex items-center gap-2 text-sm text-muted-foreground"><Dot status={s as "normal"} />{l}</span>
@@ -150,6 +134,12 @@ function CommandCenter() {
         </Panel>
       </div>
 
+      {latest && <Panel title="Latest Detection">
+        <dl className="grid grid-cols-2 gap-4 md:grid-cols-4 text-sm">
+          {[["Device ID", latest.device], ["Threat Type", latest.type], ["Confidence", `${latest.confidence}%`], ["Risk Score", `${latest.risk}/100 · ${getRiskSeverity(latest.risk)}`]].map(([label, value]) => <div key={label}><dt className="text-[11px] uppercase text-muted-foreground">{label}</dt><dd className={`mt-1 font-medium ${label === "Risk Score" ? toneText[riskTone(latest.risk)] : ""}`}>{value}</dd></div>)}
+        </dl>
+      </Panel>}
+
       <div className="grid gap-6 xl:grid-cols-2">
         <Panel title="Recent Security Events">
           <ul className="divide-y">
@@ -169,7 +159,7 @@ function CommandCenter() {
             {data.gridStatus.map((d) => (
               <li key={d} className="flex items-center justify-between py-2.5 text-sm">
                 <span>{d}</span>
-                <span className="flex items-center gap-2 text-xs text-safe"><Dot status="normal" />Operational</span>
+                <span className={`flex items-center gap-2 text-xs ${active && (d === "Smart Meter Cluster" && target?.startsWith("SM-") || d === "Feeder A" && target === "FDR-A" || d === "Feeder B" && target === "FDR-B") ? "text-warn" : "text-safe"}`}><Dot status={active && (d === "Smart Meter Cluster" && target?.startsWith("SM-") || d === "Feeder A" && target === "FDR-A" || d === "Feeder B" && target === "FDR-B") ? "warning" : "normal"} />{active && (d === "Smart Meter Cluster" && target?.startsWith("SM-") || d === "Feeder A" && target === "FDR-A" || d === "Feeder B" && target === "FDR-B") ? "Warning" : "Operational"}</span>
               </li>
             ))}
           </ul>
