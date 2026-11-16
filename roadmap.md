@@ -1,4 +1,11 @@
-# Requested updates
+# Backend continuation
+- [ ] Compact all existing pages and replace incident cards with one table, preserving interactions and navigation.
+- [ ] Add transactional SQLite persistence to the existing FastAPI service.
+- [ ] Test REST endpoints, selected targets, reset, risk bands, and restart persistence.
+- [ ] Connect all five pages to the same backend without redesigning them.
+- [ ] Verify the full workflow, save changes, and document external Python hosting requirements.
+
+# Previously completed updates
 - [x] Preserve the five pages and existing dashboard styling.
 - [x] Add typed shared mock simulation data and consistent risk scoring.
 - [x] Add target/attack controls, live telemetry, and the demonstration flow.

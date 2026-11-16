@@ -2,6 +2,15 @@ from datetime import datetime
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
+from contextlib import asynccontextmanager
+import os
+from .api.persistent import router as persistent_router
+from .services.persistent_service import initialize
+
+@asynccontextmanager
+async def lifespan(app):
+    initialize()
+    yield
 
 from .models.schemas import HealthResponse
 from .api import (
@@ -13,6 +22,7 @@ from .api import (
 )
 
 app = FastAPI(
+    lifespan=lifespan,
     title="GridNexus AI — Smart Grid Cyber Defense Backend",
     description=(
         "Software-only smart grid cybersecurity simulation and AI threat detection platform. "
@@ -27,16 +37,8 @@ app = FastAPI(
 # Configure CORS to support local frontend development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:8080",
-        "http://127.0.0.1:8080",
-        "*",  # Permissive for local hackathon demo and testing
-    ],
-    allow_credentials=True,
+    allow_origins=os.environ.get("GRIDNEXUS_ALLOWED_ORIGINS", "http://localhost:8080,http://127.0.0.1:8080").split(","),
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -48,7 +50,7 @@ def health_check() -> HealthResponse:
         status="healthy",
         version="1.0.0",
         timestamp=datetime.now().isoformat(),
-        models_loaded=True,
+        models_loaded=__import__("backend.state", fromlist=["anomaly_detector"]).anomaly_detector.is_trained and __import__("backend.state", fromlist=["attack_classifier"]).attack_classifier.is_trained,
     )
 
 # Root redirect to OpenAPI Swagger documentation
@@ -57,11 +59,7 @@ def root_redirect():
     return RedirectResponse(url="/docs")
 
 # Mount API Routers
-app.include_router(dashboard_router, prefix="/api")
-app.include_router(grid_router, prefix="/api")
-app.include_router(simulation_router, prefix="/api")
-app.include_router(alerts_router, prefix="/api")
-app.include_router(incidents_router, prefix="/api")
+app.include_router(persistent_router)
 
 if __name__ == "__main__":
     import uvicorn

@@ -11,5 +11,6 @@
 
 ## Architecture
 - All mock data lives in src/data/mock.ts with API-shaped types so it can be swapped for FastAPI calls without touching UI.
-- Simulation state, detection history, and incident history are shared via src/lib/simulation.tsx; use typed SimulationRequest/SimulationResult and the pure mock adapter so all five pages reflect the same run without network calls.
+- Simulation state, detection history, device telemetry, and incident history are shared via src/lib/simulation.tsx using the FastAPI snapshot adapter; mock simulation remains available only when no API is configured.
+- The existing Python FastAPI service owns simulation inference and transactional SQLite persistence; host it externally for published deployments because the frontend host cannot run Python.
 - Derive all risk labels, colors, and severity badges from src/lib/risk.ts to prevent inconsistent score boundaries.

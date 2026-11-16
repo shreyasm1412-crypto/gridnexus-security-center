@@ -79,11 +79,11 @@ class RiskAndSeverityEngine:
 
         # Severity bracket mapping
         severity: SeverityLevel
-        if risk_score >= 75:
+        if risk_score >= 76:
             severity = "CRITICAL"
-        elif risk_score >= 50:
+        elif risk_score >= 51:
             severity = "HIGH"
-        elif risk_score >= 25:
+        elif risk_score >= 26:
             severity = "MEDIUM"
         else:
             severity = "LOW"
